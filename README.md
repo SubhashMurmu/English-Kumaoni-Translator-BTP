@@ -99,7 +99,7 @@ FAISS Index ─────────────┐
 English Input            │
       │                  │
       ▼                  │
-Vector Representation   │
+Vector Representation    │
       │                  │
       └──── Similarity Search
                          │
@@ -155,7 +155,95 @@ venv\Scripts\activate
 pip install torch transformers peft gradio faiss-cpu sentencepiece tiktoken
 ```
 
-> **Note:** `faiss-cpu` is used by default. If you have a compatible CUDA-enabled FAISS installation, it can be replaced with the appropriate GPU version.
+> **Note:** `faiss-cpu` is used by default. If you have a compatible CUDA-enabled FAISS installation, you can replace it with the appropriate GPU version.
+
+---
+
+## Acquiring Model Weights
+
+The local inference server requires the **LoRA adapter weights** generated during the training process.
+
+The weights are generated in Google Colab and are not included in the repository. They must be downloaded and placed in the local repository before starting the inference server.
+
+### 1. Run the Training Pipeline
+
+Open the following notebook in **Google Colab**:
+
+```text
+english_kumaoni_mbart_finetuning.ipynb
+```
+
+Execute the training pipeline.
+
+After training completes, the LoRA adapter weights will be saved in:
+
+```text
+lora_weights/
+```
+
+### 2. Compress the Weights
+
+In a new Google Colab cell, run:
+
+```bash
+!zip -r lora_weights.zip lora_weights/
+```
+
+This will create:
+
+```text
+lora_weights.zip
+```
+
+### 3. Download the Weights
+
+In Google Colab:
+
+1. Open the **Files** panel using the folder icon on the left sidebar.
+2. Locate `lora_weights.zip`.
+3. Right-click the file.
+4. Select **Download**.
+
+### 4. Move the Zip File to the Repository
+
+Move the downloaded `lora_weights.zip` file into the **root directory of this repository**, alongside `app.py`.
+
+The directory should look like:
+
+```text
+English-Kumaoni-Translator-BTP/
+│
+├── app.py
+├── build_cache.py
+├── lora_weights.zip
+├── english_kumaoni_mbart_finetuning.ipynb
+└── README.md
+```
+
+### 5. Extract the Weights
+
+From the root directory of the repository, run:
+
+```bash
+unzip lora_weights.zip -d .
+```
+
+After extraction, verify that the `lora_weights/` directory exists:
+
+```text
+English-Kumaoni-Translator-BTP/
+│
+├── app.py
+├── build_cache.py
+├── lora_weights/
+│   ├── adapter_config.json
+│   ├── adapter_model.safetensors
+│   └── ...
+├── english_kumaoni_mbart_finetuning.ipynb
+└── README.md
+```
+
+> **Important:** The `lora_weights/` directory must be located in the **same directory as `app.py`**. The application expects the LoRA adapter weights at this location.
 
 ---
 
@@ -192,7 +280,7 @@ The application will start a local web server. The terminal will display the URL
 http://127.0.0.1:7860
 ```
 
-Open the URL in a web browser to access the translation interface.
+Open the URL in your web browser to access the translation interface.
 
 ---
 
@@ -207,6 +295,11 @@ English-Kumaoni-Translator-BTP/
 │
 ├── app.py
 │
+├── lora_weights/
+│   ├── adapter_config.json
+│   ├── adapter_model.safetensors
+│   └── ...
+│
 ├── faiss_cache.index
 │
 ├── translation_memory.pkl
@@ -216,11 +309,12 @@ English-Kumaoni-Translator-BTP/
 
 ### File Descriptions
 
-| File                                     | Description                                                   |
+| File / Directory                         | Description                                                   |
 | ---------------------------------------- | ------------------------------------------------------------- |
 | `english_kumaoni_mbart_finetuning.ipynb` | Model training, LoRA configuration, and dataset preprocessing |
 | `build_cache.py`                         | Builds the FAISS index and translation memory                 |
 | `app.py`                                 | Main inference application and Gradio interface               |
+| `lora_weights/`                          | LoRA adapter weights generated during model fine-tuning       |
 | `faiss_cache.index`                      | FAISS vector index used for translation-memory retrieval      |
 | `translation_memory.pkl`                 | Stored translation-memory data                                |
 | `README.md`                              | Project documentation                                         |
@@ -305,30 +399,6 @@ At inference time:
 
 ---
 
-## Future Work
-
-Potential directions for improving the system include:
-
-* Increasing the size and diversity of the English–Kumaoni parallel corpus
-* Improving Kumaoni-specific tokenization
-* Experimenting with other multilingual foundation models
-* Improving Translation Memory retrieval
-* Combining neural generation with retrieval-augmented translation
-* Evaluating the system using **BLEU, chrF, and COMET**
-* Human evaluation by native Kumaoni speakers
-* Supporting Kumaoni → English translation
-* Extending the system to other regional languages
-
----
-
-## Project Status
-
-**Status:** Baseline system / Bachelor's Thesis Project
-
-The current implementation focuses on establishing an end-to-end English-to-Kumaoni NMT pipeline using parameter-efficient fine-tuning and retrieval-based translation memory.
-
----
-
 ## Acknowledgements
 
 This project builds upon the following open-source technologies and research:
@@ -341,7 +411,7 @@ This project builds upon the following open-source technologies and research:
 
 ---
 
-## Author
+## Authors
 
 **Subhash Murmu** & **Akshat Jain**
 
