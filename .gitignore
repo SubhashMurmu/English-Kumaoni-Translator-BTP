@@ -1,0 +1,7 @@
+venv/
+lora_weights/
+lora_weights.zip
+faiss_cache.index
+translation_memory.pkl
+__pycache__/
+*.pyc
