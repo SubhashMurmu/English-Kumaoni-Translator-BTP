@@ -1,413 +1,166 @@
 # English → Kumaoni Neural Machine Translation
 
-A Neural Machine Translation (NMT) system for **English-to-Kumaoni translation**, developed as a **Bachelor's Thesis Project (BTP)**.
+A neural machine translation system for **English-to-Kumaoni**, developed as a **Bachelor's Thesis Project (BTP)** at IIT Kharagpur.
 
-The system fine-tunes Meta's **mBART-50** multilingual sequence-to-sequence model using **LoRA (Low-Rank Adaptation)** and combines it with a **FAISS-based Translation Memory** to improve translation retrieval and inference.
-
----
-
-## Overview
-
-Kumaoni is an Indo-Aryan language primarily spoken in the **Kumaon region of Uttarakhand, India**. Due to the limited availability of parallel training data, Kumaoni is considered a **low-resource language** for machine translation.
-
-This project explores the use of parameter-efficient fine-tuning and retrieval-based techniques for building an English-to-Kumaoni translation system.
-
-### Key Components
-
-* **mBART-50** for multilingual neural machine translation
-* **LoRA / PEFT** for parameter-efficient fine-tuning
-* **FAISS** for efficient similarity search
-* **Translation Memory** for retrieving previously seen or similar translations
-* **Gradio** for the web-based translation interface
+Kumaoni is an Indo-Aryan language spoken mainly in the Kumaon region of Uttarakhand, India, and is low-resource for machine translation. This project fine-tunes Meta's **mBART-50** and explores using **Hindi, a closely related language, as a sister language** (shared script and much shared vocabulary and grammar) together with linguistically motivated checks.
 
 ---
 
-## System Architecture
+## Status
+
+| Component | Status |
+| --- | --- |
+| Leak-free data preparation (deterministic split, de-duplication) | Done |
+| Baseline: mBART-50 fine-tuned on English → Kumaoni (Roman script) | Done, evaluated |
+| Web translator (`server.py` + `web/`) | Working locally |
+| Roman → Devanagari conversion tooling (`kmt/romanize.py`) | Built; reviewed word list pending |
+| Hindi sister-language transfer (lexicon induction, relexified synthetic data) | Implemented, **not yet run or evaluated** |
+| Retraining on Devanagari targets | Planned |
+| Hindi-leakage metric and reranking | Implemented, not yet evaluated |
+
+### Results so far (Roman-script baseline)
+
+Model: `facebook/mbart-large-50-many-to-many-mmt`, full fine-tuning, Adafactor, learning rate 1e-4, 5 epochs, with a dedicated Kumaoni language token initialised from Hindi's.
+
+| Split | chrF++ | BLEU |
+| --- | --- | --- |
+| Dev (547 sentences, greedy decoding) | 50.6 | 25.8 |
+| Held-out test (beam search, 5 beams) | 50.3 | 24.4 |
+
+How to read these numbers:
+
+- Scores are for **Roman-script** Kumaoni, the script of the source dataset. They are **not comparable** with future Devanagari results.
+- Many sentences in the dataset are short or templated, which inflates scores. A native-speaker evaluation of translation adequacy and fluency has not been done yet.
+- Spelling in the dataset varies a lot (for example `chhan / chha / chhe / chho`), so part of the remaining error is inconsistent romanisation rather than wrong translation.
+- The earlier LoRA version of this project reported only training loss, so no earlier score exists to compare against.
+
+---
+
+## Approach
+
+1. **Leak-free evaluation.** The train/dev/test split is deterministic (hash of the English source), exact duplicates are removed, and near-duplicate dev/test sentences are moved into training. The translation memory is built from the training split only.
+2. **A separate Kumaoni language token.** Kumaoni gets its own token (`kfy_IN`, from ISO 639-3 `kfy`) whose embedding starts as a copy of Hindi's. The model keeps the transfer benefit while Kumaoni and Hindi can diverge. This requires full fine-tuning rather than LoRA, because a frozen embedding could not tell the two tokens apart.
+3. **Hindi as sister language** *(implemented, not yet evaluated)*:
+   - English is translated to Hindi to obtain Hindi–Kumaoni pairs, and a Hindi → Kumaoni word lexicon is induced by word alignment (simalign).
+   - A native speaker reviews the lexicon, and hand-written rewrite rules (`kmt/rules.yaml`) cover verb, postposition and pronoun differences.
+   - A large English–Hindi corpus is relexified into pseudo-Kumaoni for a first training stage, followed by fine-tuning on the real data.
+4. **Devanagari output.** The dataset is in Roman script, so `kmt/romanize.py` converts it word by word with an automatic fallback and a reviewed override list for frequent words.
+5. **Linguistic checks.** A data-driven Hindi-only word list measures and penalises Hindi "leakage" in outputs, and the translation memory only accepts fuzzy matches whose numbers, names and negation agree with the query.
+
+---
+
+## Repository structure
 
 ```text
-                    English Input
-                         │
-                         ▼
-                ┌─────────────────┐
-                │  Preprocessing  │
-                └────────┬────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │  Translation Memory │
-              │       (FAISS)       │
-              └──────────┬──────────┘
-                         │
-                 Similarity Search
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │   LoRA Fine-tuned   │
-              │      mBART-50       │
-              └──────────┬──────────┘
-                         │
-                         ▼
-                Kumaoni Translation
-                         │
-                         ▼
-                 Gradio Web Interface
+English-Kumaoni-Translator-BTP/
+├── server.py                 Website + JSON API (FastAPI)
+├── web/index.html            Translator page
+├── app.py                    Optional Gradio demo
+├── build_cache.py            Builds the translation memory (used by app.py)
+├── requirements.txt
+├── kmt/
+│   ├── prep_data.py          Clean + leak-free split
+│   ├── romanize.py           Roman → Devanagari conversion (word list + overrides)
+│   ├── common.py             Model presets, Kumaoni language token
+│   ├── train.py              Full fine-tuning, model selection by chrF++
+│   ├── evaluate.py           chrF++, BLEU, Hindi-leak rate, outputs for human review
+│   ├── infer.py              Translator (n-best + leak reranking), translation memory
+│   ├── transfer.py           Hindi pivot, lexicon induction, synthetic data, leak list
+│   ├── relex.py              Lexicon + rewrite-rule engine
+│   ├── text.py               Normalisation, leakage metric, memory guard
+│   └── rules.yaml            Hindi → Kumaoni rewrite rules (to be filled with a linguist)
+├── tests/test_pure.py        Unit tests for the pure-Python parts
+└── old/                      Original LoRA notebook and scripts (v1), kept for reference
 ```
 
----
-
-## Model
-
-The project uses:
-
-**Base Model**
-
-```text
-facebook/mbart-large-50-many-to-many-mmt
-```
-
-The base mBART-50 model is fine-tuned for the English-to-Kumaoni translation task using **LoRA** through the **PEFT (Parameter-Efficient Fine-Tuning)** framework.
-
-### Why LoRA?
-
-Instead of updating all parameters of the large mBART model, LoRA introduces a relatively small number of trainable parameters.
-
-This provides:
-
-* Lower GPU memory requirements during training
-* Faster fine-tuning
-* Smaller adapter weights
-* Easier model distribution
-* Preservation of the original pretrained model
-
----
-
-## Translation Memory
-
-The inference system is augmented with a **FAISS-based Translation Memory**.
-
-The parallel corpus is converted into vector representations and stored in a FAISS index. During inference, the system searches for translations corresponding to inputs that are semantically similar to the current query.
-
-```text
-Parallel Corpus
-      │
-      ▼
-Vector Embeddings
-      │
-      ▼
-FAISS Index ─────────────┐
-                         │
-English Input            │
-      │                  │
-      ▼                  │
-Vector Representation    │
-      │                  │
-      └──── Similarity Search
-                         │
-                         ▼
-                Relevant Translations
-```
-
-This allows the system to make use of previously observed translation pairs in addition to the neural translation model.
-
----
-
-## Requirements
-
-* Python **3.10+**
-* NVIDIA GPU recommended
-* Minimum **8 GB VRAM** for GPU inference
-* CUDA-compatible PyTorch installation for GPU acceleration
+Generated or downloaded locally and **not committed**: `data/`, `data_dev/`, `synth/`, `runs/` (model weights), `*.zip`.
 
 ---
 
 ## Installation
 
-### 1. Clone the Repository
+Python 3.10+ is recommended.
 
 ```bash
 git clone https://github.com/SubhashMurmu/English-Kumaoni-Translator-BTP.git
 cd English-Kumaoni-Translator-BTP
+python -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-### 2. Create a Virtual Environment
-
-```bash
-python -m venv venv
-```
-
-Activate the environment.
-
-**Linux / macOS:**
-
-```bash
-source venv/bin/activate
-```
-
-**Windows:**
-
-```powershell
-venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install torch transformers peft gradio faiss-cpu sentencepiece tiktoken
-```
-
-> **Note:** `faiss-cpu` is used by default. If you have a compatible CUDA-enabled FAISS installation, you can replace it with the appropriate GPU version.
+For CPU-only inference you can use the smaller PyTorch build first:
+`pip install torch --index-url https://download.pytorch.org/whl/cpu`
 
 ---
 
-## Acquiring Model Weights
+## Running the website
 
-The local inference server requires the **LoRA adapter weights** generated during the training process.
-
-The weights are generated in Google Colab and are not included in the repository. They must be downloaded and placed in the local repository before starting the inference server.
-
-### 1. Run the Training Pipeline
-
-Open the following notebook in **Google Colab**:
-
-```text
-english_kumaoni_mbart_finetuning.ipynb
-```
-
-Execute the training pipeline.
-
-After training completes, the LoRA adapter weights will be saved in:
-
-```text
-lora_weights/
-```
-
-### 2. Compress the Weights
-
-In a new Google Colab cell, run:
+The trained model is **not in the repository** (about 2.4 GB). Train it as described below, or obtain the `runs/base/final/` folder from the authors, and place it at `runs/base/final/` in the project root.
 
 ```bash
-!zip -r lora_weights.zip lora_weights/
+uvicorn server:app --port 8000
 ```
 
-This will create:
+Open `http://127.0.0.1:8000`. The model needs about 3–4 GB of RAM and takes a minute to load; on CPU, each translation takes a few seconds.
 
-```text
-lora_weights.zip
-```
+| Environment variable | Meaning | Default |
+| --- | --- | --- |
+| `KMT_MODEL` | Model directory | `runs/base/final` |
+| `KMT_PRESET` | `mbart` or `nllb` | `mbart` |
+| `KMT_SCRIPT` | `devanagari` (convert Roman output) or `roman` | `devanagari` |
+| `KMT_ALPHA` | Hindi-leak reranking weight (0 = off) | `0` |
+| `KMT_DEMO=1` | Echo mode without loading the model, for UI work | off |
 
-### 3. Download the Weights
+Until the model is retrained on Devanagari data, the server converts the model's Roman output with `kmt/romanize.py`, and spellings will be imperfect until the override list is reviewed.
 
-In Google Colab:
+The older Gradio interface is still available: run `python build_cache.py` (needs `data/train.jsonl`), then `python app.py`.
 
-1. Open the **Files** panel using the folder icon on the left sidebar.
-2. Locate `lora_weights.zip`.
-3. Right-click the file.
-4. Select **Download**.
+---
 
-### 4. Move the Zip File to the Repository
+## Training and evaluation
 
-Move the downloaded `lora_weights.zip` file into the **root directory of this repository**, alongside `app.py`.
-
-The directory should look like:
-
-```text
-English-Kumaoni-Translator-BTP/
-│
-├── app.py
-├── build_cache.py
-├── lora_weights.zip
-├── english_kumaoni_mbart_finetuning.ipynb
-└── README.md
-```
-
-### 5. Extract the Weights
-
-From the root directory of the repository, run:
+A GPU is needed for training (a Colab or Kaggle T4 is enough; the baseline took about 65 minutes for 5 epochs).
 
 ```bash
-unzip lora_weights.zip -d .
+# 1. Clean, de-duplicate and split the dataset
+python -m kmt.prep_data --out data
+
+# 2. Baseline
+python -m kmt.train --preset mbart --out runs/base --train data/train.jsonl:1 \
+    --lr 1e-4 --epochs 5 --optim adafactor --max_len 96 --resume
+
+# 3. Evaluate on the held-out test set
+python -m kmt.evaluate --model runs/base/final --out eval_base.tsv
+
+# 4. Devanagari conversion (after reviewing synth/overrides.tsv)
+python -m kmt.romanize vocab   --data data --out synth/roman_vocab.tsv
+python -m kmt.romanize convert --data data --out data_dev --overrides synth/overrides.tsv
 ```
 
-After extraction, verify that the `lora_weights/` directory exists:
+The Hindi-transfer steps (`python -m kmt.transfer pivot | lexicon | synth | leaklist`) are documented at the top of `kmt/transfer.py`. Run the unit tests with `python -m pytest -q tests`.
 
-```text
-English-Kumaoni-Translator-BTP/
-│
-├── app.py
-├── build_cache.py
-├── lora_weights/
-│   ├── adapter_config.json
-│   ├── adapter_model.safetensors
-│   └── ...
-├── english_kumaoni_mbart_finetuning.ipynb
-└── README.md
-```
-
-> **Important:** The `lora_weights/` directory must be located in the **same directory as `app.py`**. The application expects the LoRA adapter weights at this location.
+The training and Hindi-transfer scripts need a recent `transformers` (4.46 or newer). If `--optim adafactor` runs out of memory, lower `--bs` and raise `--grad_accum`.
 
 ---
 
-## Running the System
+## Limitations
 
-The inference pipeline consists of two steps.
-
-### Step 1 — Build the Translation Memory
-
-Before starting the application, generate the FAISS cache:
-
-```bash
-python build_cache.py
-```
-
-This creates the required translation-memory files:
-
-```text
-faiss_cache.index
-translation_memory.pkl
-```
-
-### Step 2 — Start the Application
-
-Run the Gradio application:
-
-```bash
-python app.py
-```
-
-The application will start a local web server. The terminal will display the URL, typically:
-
-```text
-http://127.0.0.1:7860
-```
-
-Open the URL in your web browser to access the translation interface.
+- The dataset is small (about 10,000 training pairs), partly templated, and its dialect and spelling conventions are not documented. Translations may differ from the dialect a given speaker uses.
+- The conversion to Devanagari is only as good as the reviewed word list; unreviewed words fall back to an automatic rule-based conversion that is wrong for some words (loanwords, final long vowels).
+- No human evaluation has been done yet. Treat the automatic scores as indicative.
+- Translations can be wrong. Check anything important with a Kumaoni speaker.
 
 ---
 
-## Repository Structure
+## Technologies
 
-```text
-English-Kumaoni-Translator-BTP/
-│
-├── english_kumaoni_mbart_finetuning.ipynb
-│
-├── build_cache.py
-│
-├── app.py
-│
-├── lora_weights/
-│   ├── adapter_config.json
-│   ├── adapter_model.safetensors
-│   └── ...
-│
-├── faiss_cache.index
-│
-├── translation_memory.pkl
-│
-└── README.md
-```
-
-### File Descriptions
-
-| File / Directory                         | Description                                                   |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| `english_kumaoni_mbart_finetuning.ipynb` | Model training, LoRA configuration, and dataset preprocessing |
-| `build_cache.py`                         | Builds the FAISS index and translation memory                 |
-| `app.py`                                 | Main inference application and Gradio interface               |
-| `lora_weights/`                          | LoRA adapter weights generated during model fine-tuning       |
-| `faiss_cache.index`                      | FAISS vector index used for translation-memory retrieval      |
-| `translation_memory.pkl`                 | Stored translation-memory data                                |
-| `README.md`                              | Project documentation                                         |
-
----
-
-## Training Pipeline
-
-The model training process is implemented in:
-
-```text
-english_kumaoni_mbart_finetuning.ipynb
-```
-
-The general training workflow is:
-
-```text
-Parallel English–Kumaoni Dataset
-              │
-              ▼
-       Data Preprocessing
-              │
-              ▼
-      Tokenization (mBART)
-              │
-              ▼
-       LoRA Configuration
-              │
-              ▼
-      mBART-50 Fine-tuning
-              │
-              ▼
-       LoRA Adapter Weights
-              │
-              ▼
-        Inference System
-```
-
----
-
-## Inference Pipeline
-
-At inference time:
-
-```text
-             English Sentence
-                    │
-                    ▼
-             Input Processing
-                    │
-                    ▼
-          Translation Memory
-             FAISS Search
-                    │
-                    ▼
-        Relevant Translation Pairs
-                    │
-                    ▼
-       LoRA Fine-tuned mBART
-                    │
-                    ▼
-          Generated Translation
-                    │
-                    ▼
-             Kumaoni Output
-```
-
----
-
-## Technologies Used
-
-| Technology        | Purpose                          |
-| ----------------- | -------------------------------- |
-| **Python**        | Development language             |
-| **PyTorch**       | Deep learning framework          |
-| **Transformers**  | mBART model implementation       |
-| **PEFT**          | LoRA-based fine-tuning           |
-| **FAISS**         | Vector similarity search         |
-| **Gradio**        | Web interface                    |
-| **SentencePiece** | Tokenization                     |
-| **mBART-50**      | Neural machine translation model |
+PyTorch, Hugging Face Transformers, mBART-50, FastAPI, sacreBLEU, simalign and `indic-transliteration` (conversion and lexicon induction), FAISS and sentence-transformers (translation memory), Gradio (optional demo). The Hindi-transfer pipeline also uses NLLB-200 (distilled 600M) for English → Hindi pivoting and the IITB English–Hindi corpus for synthetic data.
 
 ---
 
 ## Acknowledgements
 
-This project builds upon the following open-source technologies and research:
-
-* Meta AI's **mBART-50**
-* Hugging Face **Transformers**
-* Hugging Face **PEFT**
-* **FAISS**
-* **Gradio**
+Meta AI's mBART-50 and NLLB-200, Hugging Face Transformers, FAISS, and the open-source authors of the tools listed above.
 
 ---
 
@@ -415,11 +168,10 @@ This project builds upon the following open-source technologies and research:
 
 **Subhash Murmu** & **Akshat Jain**
 
-Bachelor's Thesis Project
-Indian Institute of Technology Kharagpur
+Bachelor's Thesis Project, Indian Institute of Technology Kharagpur
 
 ---
 
 ## License
 
-This project is intended for **academic and research purposes**. Please check the licenses of the underlying models, datasets, and dependencies before redistributing or deploying the system.
+This project is intended for **academic and research purposes**. Check the licenses of the underlying models (mBART-50, NLLB-200), the dataset and the dependencies before redistributing the model or deploying the system.
