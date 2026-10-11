@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English to Kumaoni translator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;600;700&family=Noto+Serif+Devanagari:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --mist:   #e9eff0;   /* page: valley mist */
+    --slate:  #16222b;   /* text: dusk slate */
+    --paper:  #f8fafa;   /* panels */
+    --line:   #c4d0d4;
+    --pine:   #2f5d4e;   /* secondary actions */
+    --burans: #b0214a;   /* primary action: rhododendron */
+    --muted:  #546670;
+    --contour: #16222b;
+    --ui: "Mukta", "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --deva: "Noto Serif Devanagari", "Noto Serif", "Kohinoor Devanagari", "Nirmala UI", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mist: #0f1a22; --slate: #e5eef0; --paper: #16242e; --line: #2c4050;
+      --pine: #7fc1aa; --burans: #ea5f84; --muted: #93a8b2; --contour: #e5eef0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mist: #0f1a22; --slate: #e5eef0; --paper: #16242e; --line: #2c4050;
+    --pine: #7fc1aa; --burans: #ea5f84; --muted: #93a8b2; --contour: #e5eef0;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--mist); color: var(--slate);
+    font-family: var(--ui); font-size: 1.0625rem; line-height: 1.55;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+  }
+  /* terraced hillside contours: the single decorative element */
+  .contours { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .07; color: var(--contour); }
+  .contours svg { width: 100%; height: 100%; }
+
+  main { position: relative; z-index: 1; max-width: 62rem; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+  h1 { font-size: clamp(1.7rem, 4.5vw, 2.4rem); line-height: 1.15; margin: 0 0 .4rem; font-weight: 700; letter-spacing: -.01em; }
+  .sub { margin: 0 0 1.75rem; color: var(--muted); max-width: 40rem; }
+
+  .banner { display: none; margin: 0 0 1rem; padding: .6rem .9rem; border: 1px solid var(--burans); border-radius: 6px; font-size: .95rem; }
+  .banner.show { display: block; }
+
+  .panes { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+  @media (min-width: 52rem) { .panes { grid-template-columns: 1fr 1.25fr; gap: 1.25rem; } }
+
+  .pane { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem 1rem; display: flex; flex-direction: column; min-height: 15rem; }
+  .pane > label, .pane > .label { font-weight: 600; font-size: .95rem; color: var(--muted); margin-bottom: .5rem; }
+
+  textarea {
+    flex: 1; width: 100%; min-height: 9rem; resize: vertical; border: 0; outline: 0; background: transparent;
+    color: inherit; font: inherit; font-size: 1.2rem; line-height: 1.5; padding: 0;
+  }
+  textarea::placeholder { color: var(--muted); opacity: .8; }
+
+  .out { flex: 1; font-family: var(--deva); font-size: clamp(1.6rem, 3.6vw, 2.15rem); line-height: 1.6; min-height: 9rem; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .out.empty { color: var(--muted); font-family: var(--ui); font-size: 1.05rem; line-height: 1.55; }
+  .out.busy { opacity: .45; }
+
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .75rem; }
+  .bar .grow { flex: 1; }
+  .count { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .count.warn { color: var(--burans); font-weight: 600; }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: .55rem 1.1rem;
+    border: 1px solid var(--line); background: transparent; color: var(--slate); min-height: 2.6rem;
+  }
+  button:hover:not(:disabled) { border-color: var(--pine); color: var(--pine); }
+  button.primary { background: var(--burans); border-color: var(--burans); color: #fff; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; border-color: var(--burans); }
+  button:disabled { opacity: .5; cursor: default; }
+  :is(button, textarea, a):focus-visible { outline: 3px solid var(--pine); outline-offset: 2px; }
+
+  .status { min-height: 1.5rem; margin: .9rem 0 0; font-size: .98rem; }
+  .status.err { color: var(--burans); }
+  .status code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; background: var(--paper); padding: .1rem .35rem; border-radius: 4px; border: 1px solid var(--line); }
+
+  .try { margin-top: 1.5rem; }
+  .try p { margin: 0 0 .5rem; color: var(--muted); font-size: .95rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .chips button { font-weight: 400; border-radius: 999px; padding: .35rem .9rem; min-height: 2.2rem; }
+
+  footer { margin-top: 2.25rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .92rem; max-width: 44rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .out { transition: opacity .18s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="contours" aria-hidden="true">
+  <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" fill="none" stroke="currentColor" stroke-width="1.2">
+    <path d="M-20 520 C 120 470, 200 540, 340 490 S 600 430, 820 480"/>
+    <path d="M-20 470 C 130 420, 210 490, 340 440 S 610 380, 820 430"/>
+    <path d="M-20 420 C 140 370, 220 440, 340 390 S 620 330, 820 380"/>
+    <path d="M-20 370 C 150 320, 230 390, 350 340 S 630 280, 820 330"/>
+    <path d="M-20 320 C 160 270, 240 340, 360 290 S 640 230, 820 280"/>
+    <path d="M-20 270 C 170 220, 250 290, 370 240 S 650 180, 820 230"/>
+    <path d="M-20 220 C 180 170, 260 240, 380 190 S 660 130, 820 180"/>
+  </svg>
+</div>
+
+<main>
+  <h1>English to Kumaoni translator</h1>
+  <p class="sub">Type a sentence in English and get the Kumaoni translation in Devanagari script.</p>
+
+  <div id="demo" class="banner" role="status">Demo mode: no translation model is loaded, so the server only echoes your text.</div>
+
+  <div class="panes">
+    <section class="pane">
+      <label for="src">English</label>
+      <textarea id="src" maxlength="300" rows="5" placeholder="Where is the market?" autocomplete="off" spellcheck="true"></textarea>
+      <div class="bar">
+        <span id="count" class="count">0 / 300</span>
+        <span class="grow"></span>
+        <button id="clear" type="button">Clear</button>
+        <button id="go" type="button" class="primary">Translate</button>
+      </div>
+    </section>
+
+    <section class="pane">
+      <div class="label" id="out-label">Kumaoni</div>
+      <p id="out" class="out empty" lang="x-kfy" aria-labelledby="out-label" aria-live="polite">The translation appears here. Press Ctrl+Enter (Cmd+Enter on Mac) to translate from the keyboard.</p>
+      <div class="bar">
+        <span class="grow"></span>
+        <button id="copy" type="button" disabled>Copy translation</button>
+      </div>
+    </section>
+  </div>
+
+  <p id="status" class="status" role="status"></p>
+
+  <div class="try">
+    <p>Try an example</p>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <footer>
+    This is a research prototype trained on a small dataset. Translations can be wrong or use a different dialect from the one you speak, so check anything important with a Kumaoni speaker.
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const src = $("src"), out = $("out"), go = $("go"), copy = $("copy"), clear = $("clear");
+  const count = $("count"), status = $("status"), MAX = 300;
+  const EMPTY_HINT = out.textContent;
+  const EXAMPLES = ["How are you?", "Where is the market?", "I would like some tea.", "The festival is next week."];
+  let current = "", controller = null;
+
+  EXAMPLES.forEach((t) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = t;
+    b.addEventListener("click", () => { src.value = t; updateCount(); translate(); });
+    $("chips").appendChild(b);
+  });
+
+  function updateCount() {
+    const n = src.value.length;
+    count.textContent = n + " / " + MAX;
+    count.classList.toggle("warn", n >= MAX);
+  }
+
+  function setStatus(msg, isErr) {
+    status.className = "status" + (isErr ? " err" : "");
+    status.innerHTML = msg || "";
+  }
+
+  function showResult(text) {
+    current = text;
+    out.classList.remove("empty", "busy");
+    out.textContent = text;
+    copy.disabled = !text;
+  }
+
+  async function translate() {
+    const text = src.value.trim();
+    if (!text) { setStatus("Type an English sentence first.", true); src.focus(); return; }
+    if (controller) controller.abort();
+    controller = new AbortController();
+    go.disabled = true; go.textContent = "Translating…";
+    out.classList.add("busy"); setStatus("");
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }), signal: controller.signal
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      showResult(data.translation || "");
+      $("demo").classList.toggle("show", !!data.demo);
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      out.classList.remove("busy");
+      setStatus("Could not reach the translation server. Start it with <code>uvicorn server:app --port 8000</code> and open <code>http://127.0.0.1:8000</code>.", true);
+    } finally {
+      go.disabled = false; go.textContent = "Translate";
+    }
+  }
+
+  go.addEventListener("click", translate);
+  src.addEventListener("input", updateCount);
+  src.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); translate(); }
+  });
+  clear.addEventListener("click", () => {
+    src.value = ""; updateCount(); current = ""; copy.disabled = true;
+    out.className = "out empty"; out.textContent = EMPTY_HINT; setStatus(""); src.focus();
+  });
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(current);
+      setStatus("Copied.");
+      setTimeout(() => setStatus(""), 1500);
+    } catch (_) {
+      setStatus("Copy was blocked by the browser. Select the text and copy it manually.", true);
+    }
+  });
+
+  updateCount();
+  fetch("/api/health").then((r) => r.json()).then((h) => $("demo").classList.toggle("show", !!h.demo)).catch(() => {});
+})();
+</script>
+</body>
+</html>

@@ -1,28 +1,17 @@
-import faiss
+"""Build the translation memory from the TRAIN split only (never dev/test - that would leak)."""
+import json
 import pickle
-import numpy as np
-from datasets import load_dataset
+
+import faiss
 from sentence_transformers import SentenceTransformer
 
-INDEX_OUT = "faiss_cache.index"
-LOOKUP_OUT = "translation_memory.pkl"
+rows = [json.loads(l) for l in open("data/train.jsonl", encoding="utf-8") if l.strip()]
+src, tgt = [r["src"] for r in rows], [r["tgt"] for r in rows]
 
-dataset = load_dataset("sourabsb/english-kumaoni_translation_dataset", split="train")
-
-english_sentences = dataset["english"]
-kumaoni_sentences = dataset["kumaoni"]
-
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
-embeddings = embedder.encode(english_sentences, convert_to_numpy=True, normalize_embeddings=True)
-
-dimension = embeddings.shape[1]
-index = faiss.IndexFlatIP(dimension)
-index.add(embeddings)
-
-faiss.write_index(index, INDEX_OUT)
-
-lookup = {i: kumaoni_sentences[i] for i in range(len(kumaoni_sentences))}
-with open(LOOKUP_OUT, "wb") as f:
-    pickle.dump(lookup, f)
-
-print(f"Indexed {index.ntotal} sentences.")
+emb = SentenceTransformer("all-MiniLM-L6-v2").encode(src, convert_to_numpy=True, normalize_embeddings=True)
+index = faiss.IndexFlatIP(emb.shape[1])
+index.add(emb)
+faiss.write_index(index, "faiss_cache.index")
+with open("translation_memory.pkl", "wb") as f:
+    pickle.dump({"src": src, "tgt": tgt}, f)
+print(f"Indexed {index.ntotal} sentences (train split only).")

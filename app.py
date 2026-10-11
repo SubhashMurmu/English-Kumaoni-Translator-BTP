@@ -1,60 +1,35 @@
+import os
+
 import gradio as gr
-import torch
-import faiss
-import pickle
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-from peft import PeftModel
-from sentence_transformers import SentenceTransformer
 
-INDEX_PATH = "faiss_cache.index"
-LOOKUP_PATH = "translation_memory.pkl"
-BASE_MODEL = "facebook/mbart-large-50-many-to-many-mmt"
-LORA_WEIGHTS = "./lora_weights"
-SIMILARITY_THRESHOLD = 0.95
+from kmt.infer import TranslationMemory, Translator, load_hindi_only
 
-index = faiss.read_index(INDEX_PATH)
-with open(LOOKUP_PATH, "rb") as f:
-    translation_memory = pickle.load(f)
+MODEL_DIR = os.environ.get("KMT_MODEL", "runs/B/final")
+PRESET = os.environ.get("KMT_PRESET", "mbart")
+ALPHA = float(os.environ.get("KMT_ALPHA", "1.0"))   # tune on dev; 0 disables leak penalty
 
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+translator = Translator(MODEL_DIR, PRESET, load_hindi_only("synth/hindi_only.txt"))  # raises if wrong dir
+memory = (TranslationMemory("faiss_cache.index", "translation_memory.pkl")
+          if os.path.exists("faiss_cache.index") else None)
 
-tokenizer = MBart50TokenizerFast.from_pretrained(BASE_MODEL)
-base_model = MBartForConditionalGeneration.from_pretrained(
-    BASE_MODEL,
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-    device_map="auto"
-)
 
-try:
-    model = PeftModel.from_pretrained(base_model, LORA_WEIGHTS)
-except Exception:
-    model = base_model
-
-def translate(text):
-    text = text.strip()
+def translate(text, use_memory):
+    text = (text or "").strip()
     if not text:
-        return ""
-    
-    query_vec = embedder.encode([text], convert_to_numpy=True, normalize_embeddings=True)
-    distances, indices = index.search(query_vec, 1)
-    
-    if distances[0][0] >= SIMILARITY_THRESHOLD and indices[0][0] != -1:
-        return f"[Cache Hit: {distances[0][0]:.3f}]\n" + translation_memory[indices[0][0]]
-    
-    tokenizer.src_lang = "en_XX"
-    encoded = tokenizer(text, return_tensors="pt").to(model.device)
-    generated = model.generate(
-        **encoded,
-        forced_bos_token_id=tokenizer.lang_code_to_id.get("hi_IN", tokenizer.eos_token_id),
-        max_new_tokens=128
-    )
-    return tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
+        return "", ""
+    if use_memory and memory is not None:
+        hit = memory.lookup(text)
+        if hit:
+            return hit[0], f"translation memory (similarity {hit[1]:.2f})"
+    return translator.translate([text], alpha=ALPHA)[0], "neural model"
+
 
 demo = gr.Interface(
     fn=translate,
-    inputs=gr.Textbox(lines=3, placeholder="Enter English text..."),
-    outputs=gr.Textbox(lines=3, label="Kumaoni Translation"),
-    title="English to Kumaoni Translator"
+    inputs=[gr.Textbox(lines=3, placeholder="Enter English text..."),
+            gr.Checkbox(value=True, label="Use translation memory")],
+    outputs=[gr.Textbox(lines=3, label="Kumaoni translation"), gr.Textbox(label="Source")],
+    title="English to Kumaoni Translator",
 )
 
 if __name__ == "__main__":

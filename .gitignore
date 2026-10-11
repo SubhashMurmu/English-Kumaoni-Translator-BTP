@@ -5,3 +5,15 @@ faiss_cache.index
 translation_memory.pkl
 __pycache__/
 *.pyc
+
+# v2: never commit models, data or build output
+runs/
+data/
+data_dev/
+synth/*
+!synth/overrides.tsv
+*.zip
+faiss_cache.index
+translation_memory.pkl
+__pycache__/
+.pytest_cache/

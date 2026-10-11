@@ -1,0 +1,19 @@
+# Hindi -> Kumaoni rewrite rules, applied IN ORDER after word-level lexicon substitution.
+# Python regex syntax. Keep this file small and linguist-reviewed: every rule here is
+# applied to hundreds of thousands of synthetic sentences, so one wrong rule becomes
+# a systematic error in the model.
+#
+# What belongs here (word-by-word lexicon can't capture it):
+#   * verb/auxiliary paradigms (present/past copula, perfective, future endings)
+#   * agreement-sensitive postpositions (e.g. genitive that agrees with the possessed noun)
+#   * pronoun case forms and honorific levels
+# Source them from a Kumaoni grammar (Grierson, Linguistic Survey of India Vol. IX Pt. IV,
+# Pahari languages, is a classic starting point) AND a native-speaker check.
+# Frequent function words (case markers, pronouns) will already show up in the induced
+# lexicon -- review those first; use rewrites only for multi-token / suffix patterns.
+#
+# Format:
+#   - pattern: "(?<=\\s)HINDI_SUFFIX(?=\\s|$)"
+#     repl: "KUMAONI_SUFFIX"
+#     note: "why / source / reviewed-by"
+rewrites: []
