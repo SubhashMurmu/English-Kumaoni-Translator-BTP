@@ -1,0 +1,31 @@
+# Penalty presets. Both are computed in parallel; pre-register which one is PRIMARY.
+
+presets:
+
+  # WMT-style segment score, after Freitag et al. (2021), "Experts, Errors, and Context".
+  # Verified from the paper: Major=5; Minor=1; Minor Fluency/Punctuation=0.1;
+  # Major Non-translation=25; Neutral=0; at most 5 errors counted per segment; the
+  # segment score is the mean over annotators; no per-word normalisation.
+  # ADAPTATION: the paper dropped the Critical level. Here Critical is mapped to 25 so the
+  # scheme keeps the three official severities. This is a project choice.
+  wmt_style:
+    weights: {neutral: 0, minor: 1, major: 5, critical: 25}
+    overrides:
+      - {dimension: linguistic_conventions, subtype: punctuation, severity: minor, weight: 0.1}
+      - {dimension: special, subtype: non_translation, severity: major, weight: 25}
+    cap_errors_per_segment: 5       # keep the 5 highest-penalty errors
+    normalise: none
+
+  # Official-style normalised score, following the structure on
+  # themqm.org/mqm-pillars/the-mqm-scoring-models/ :
+  #   ETPT = (sum over severities of count * SPM) * ETW
+  #   APT  = sum of ETPT;  PWPT = APT / evaluated word count;  NPT = PWPT * reference word count
+  # The 0/1/5/25 multipliers, RWC=1000, MSV=100 are the page's EXAMPLES, not normative.
+  # The pass threshold is a project decision and has no default here.
+  official_style:
+    weights: {neutral: 0, minor: 1, major: 5, critical: 25}
+    error_type_weights: {}          # default ETW = 1 for every dimension
+    reference_word_count: 1000
+    word_count_basis: source        # normalise by ENGLISH source words (project choice)
+    max_score_value: 100
+    passing_threshold: null

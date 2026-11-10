@@ -1,0 +1,64 @@
+# Error typology for the English -> Kumaoni MQM study.
+#
+# `origin` says where each entry comes from, so the report can separate official
+# standards from project choices:
+#   mqm_v2   top-level dimension names of the MQM typology (themqm.org/error-types-2/typology/)
+#   freitag  sub-types as listed in Freitag et al. (2021), Table 2, a WMT-style MQM adaptation
+#   project  added for this project; NOT part of official MQM
+#
+# Annotators pick `dimension` + `subtype`. Every subtype is allowed at any severity
+# unless `only_severity` is set.
+
+severities:
+  - neutral     # differs from preference/reference but acceptable; never penalised
+  - minor
+  - major
+  - critical    # (official MQM has it; Freitag et al. dropped it - see severity_weights.yaml)
+
+dimensions:
+  accuracy:
+    origin: mqm_v2
+    subtypes:
+      addition:        {origin: freitag}
+      omission:        {origin: freitag}
+      mistranslation:  {origin: freitag}
+      untranslated:    {origin: freitag}     # source text left as-is that should be translated
+  linguistic_conventions:                     # called "Fluency" in MQM v1 and in Freitag et al.
+    origin: mqm_v2
+    subtypes:
+      grammar:         {origin: freitag}
+      spelling:        {origin: freitag}     # genuine misspelling, not accepted variation
+      punctuation:     {origin: freitag}
+      register:        {origin: freitag}
+      inconsistency:   {origin: freitag}
+      spelling_variant:
+        origin: project
+        only_severity: neutral               # accepted variant spelling, e.g. chhan/chha/chhe
+  terminology:
+    origin: mqm_v2
+    subtypes:
+      inappropriate_for_context: {origin: freitag}
+      inconsistent_use:          {origin: freitag}
+  style:
+    origin: mqm_v2
+    subtypes:
+      awkward:         {origin: freitag}
+  audience_appropriateness:
+    origin: mqm_v2
+    subtypes:
+      dialect_mismatch:
+        origin: project                      # valid Kumaoni but a variety the annotator rejects
+  language_identity:                          # project-specific dimension
+    origin: project
+    subtypes:
+      hindi_leakage:     {origin: project}   # Hindi word/form used where Kumaoni is expected
+      other_language:    {origin: project}   # any other language mixed in
+  special:
+    origin: freitag
+    subtypes:
+      non_translation:   {origin: freitag}   # output is unrelated to the source / unusable
+      source_error:      {origin: freitag}   # the English source itself is faulty
+  other:
+    origin: freitag
+    subtypes:
+      other:             {origin: freitag}

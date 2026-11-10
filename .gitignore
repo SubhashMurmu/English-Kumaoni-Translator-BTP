@@ -17,3 +17,4 @@ faiss_cache.index
 translation_memory.pkl
 __pycache__/
 .pytest_cache/
+mqm_run/
