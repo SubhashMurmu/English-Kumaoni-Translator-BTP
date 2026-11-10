@@ -82,7 +82,12 @@ Definitions are paraphrased from MQM; the Kumaoni notes are **[project]**.
    effectively Hindi, record one `critical` `hindi_leakage` error on the whole sentence instead of many
    small ones.
 4. **Script.** Items appear in Roman script. Do not mark the script itself as an error.
-5. **Names and numbers.** A changed name or number is an `accuracy` `mistranslation`; severity is
+5. **English words in the translation.** Ask yourself whether you and other Kumaoni speakers would
+   say that English word as it is in everyday speech. If yes, do not mark it (or mark `neutral` if
+   you want it recorded). If no, mark `language_identity` / `other_language`: `minor` if the
+   meaning is still clear, `major` if it makes the sentence hard to understand. Festival, place and
+   personal names written in Roman script are not errors.
+6. **Names and numbers.** A changed name or number is an `accuracy` `mistranslation`; severity is
    `major`, or `critical` if it could mislead.
 
 ## 6. Process
