@@ -18,3 +18,5 @@ translation_memory.pkl
 __pycache__/
 .pytest_cache/
 mqm_run/
+__pycache__/
+.pytest_cache/
