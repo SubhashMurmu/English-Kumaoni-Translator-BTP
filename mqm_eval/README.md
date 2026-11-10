@@ -20,6 +20,23 @@ python -m mqm_eval.cli sheets --run mqm_run
 python -m mqm_eval.cli analyze --run mqm_run --filled path/to/filled_sheets --out mqm_run/results
 ```
 
+### Excel sheets with dropdowns (recommended for annotators)
+
+```bash
+python -m mqm_eval.cli xlsx --run mqm_run     # makes sheet_A1.xlsx, sheet_A2.xlsx next to the CSVs
+```
+Give each annotator ONE format (the .xlsx). `analyze` reads .csv or .xlsx from the filled-sheets folder,
+but refuses a folder that holds both for the same annotator.
+
+### Automatic diagnostics (no annotators needed)
+
+```bash
+python -m mqm_eval.cli diagnose --run mqm_run   # writes mqm_run/diagnostics/diagnostics_report.md
+```
+Rule-based checks (empty, copied source, copied English words, repetition, number mismatch, length outliers)
+plus chrF++/BLEU with bootstrap CIs by group. These are not human judgments and not MQM; report them
+beside the MQM results, never instead of them.
+
 Test the pipeline without annotators using SYNTHETIC data (never report these results):
 `python -m mqm_eval.cli simulate --run mqm_run` then `analyze --filled mqm_run/synthetic_filled`.
 

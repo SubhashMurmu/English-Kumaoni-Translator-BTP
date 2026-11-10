@@ -16,6 +16,44 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def read_sheet(path):
+    """Rows of an annotation sheet, from a .csv or an .xlsx (the 'Annotate' tab).
+
+    xlsx rows carry '__line__', the real spreadsheet row, so problem messages point at the
+    right line even when blank rows are skipped.
+    """
+    p = Path(path)
+    if p.suffix.lower() != ".xlsx":
+        return read_csv(p)
+    from openpyxl import load_workbook
+    wb = load_workbook(p, read_only=True, data_only=True)
+    ws = wb["Annotate"] if "Annotate" in wb.sheetnames else wb.worksheets[0]
+    it = ws.iter_rows(values_only=True)
+    header = [str(h).strip() if h is not None else "" for h in next(it)]
+    rows = []
+    for n, r in enumerate(it, start=2):
+        if r is None or all(v is None or str(v).strip() == "" for v in r):
+            continue
+        row = {h: ("" if v is None else str(v)) for h, v in zip(header, r) if h}
+        row["__line__"] = n
+        rows.append(row)
+    wb.close()
+    return rows
+
+
+def collect_sheet_paths(folder):
+    """CSV and XLSX sheets in a folder (Excel lock files ignored). A CSV and an XLSX with the
+    same name would double-count one annotator's work, so that is an error."""
+    folder = Path(folder)
+    paths = sorted(p for p in list(folder.glob("*.csv")) + list(folder.glob("*.xlsx"))
+                   if not p.name.startswith("~$"))
+    stems = [p.stem for p in paths]
+    dup = sorted({s for s in stems if stems.count(s) > 1})
+    if dup:
+        raise ValueError(f"both .csv and .xlsx exist for {dup}; keep only one of each")
+    return paths
+
+
 def read_jsonl(path):
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -46,7 +84,8 @@ def load_annotations(sheet_paths, key, typology=None):
     ann, problems, texts = {}, [], {}
     seen_annotators = set()
     for p in sheet_paths:
-        for n, row in enumerate(read_csv(p), start=2):          # row 1 is the header
+        for n, row in enumerate(read_sheet(p), start=2):        # row 1 is the header
+            n = row.get("__line__", n)
             iid = (row.get("item_id") or "").strip()
             where = f"{Path(p).name} line {n} ({iid or 'no item_id'})"
             if iid not in key:

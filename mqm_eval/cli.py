@@ -44,6 +44,26 @@ def cmd_sheets(a):
     print({k: len(v) for k, v in sheets.items()}, "items per annotator ->", out)
 
 
+def cmd_xlsx(a):
+    from .load import read_csv
+    from .xlsx import write_xlsx
+    sheets = Path(a.run) / "sheets"
+    made = []
+    for csv_path in sorted(sheets.glob("sheet_*.csv")):
+        made.append(write_xlsx(read_csv(csv_path), csv_path.with_suffix(".xlsx")))
+    if not made:
+        raise SystemExit(f"no sheet_*.csv found in {sheets}; run the sheets command first")
+    print("Excel sheets with dropdowns:", *[str(p) for p in made], sep="\n  ")
+
+
+def cmd_diagnose(a):
+    from .diagnostics import run_diagnostics
+    out = a.out or str(Path(a.run) / "diagnostics")
+    res = run_diagnostics(a.run, out, a.boot, a.seed)
+    print(f"diagnostics -> {Path(out) / 'diagnostics_report.md'}   ({res['n_segments']} segments, "
+          f"{res['n_flagged']} with at least one flag)")
+
+
 def cmd_simulate(a):
     from .simulate import simulate
     out, paths = simulate(a.run, a.out, a.seed)
@@ -53,8 +73,9 @@ def cmd_simulate(a):
 def cmd_analyze(a):
     from .report import run_analysis
     from .simulate import MARKER
+    from .load import collect_sheet_paths
     filled = Path(a.filled)
-    paths = sorted(filled.glob("*.csv")) if filled.is_dir() else [filled]
+    paths = collect_sheet_paths(filled) if filled.is_dir() else [filled]
     synthetic = filled.is_dir() and (filled / MARKER).exists()
     res = run_analysis(a.run, paths, a.out, a.primary, a.boot, a.seed, a.allow_problems, synthetic,
                        a.comet, a.force_comet)
@@ -86,6 +107,15 @@ def main():
     p.add_argument("--n_check", type=int, default=8)
     _common(p)
     p.set_defaults(fn=cmd_sheets)
+    p = sub.add_parser("xlsx", help="make Excel versions (with dropdowns) of the sheets already generated")
+    p.add_argument("--run", default="mqm_run")
+    p.set_defaults(fn=cmd_xlsx)
+    p = sub.add_parser("diagnose", help="automatic, rule-based diagnostics of the S1 outputs (no annotators needed)")
+    p.add_argument("--run", default="mqm_run")
+    p.add_argument("--out", default=None)
+    p.add_argument("--boot", type=int, default=500)
+    p.add_argument("--seed", type=int, default=13)
+    p.set_defaults(fn=cmd_diagnose)
     p = sub.add_parser("simulate", help="generate SYNTHETIC annotations to test the pipeline")
     p.add_argument("--run", default="mqm_run")
     p.add_argument("--out", default=None)
