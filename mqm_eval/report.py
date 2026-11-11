@@ -142,7 +142,7 @@ def figures(items, out):
     ax.set_yticks(range(len(groups)))
     ax.set_yticklabels([f"{n} (n={len(i)})" for n, i, _ in groups[::-1]], color=INK)
     ax.set_xlabel("Segment penalty, WMT-style (0 = no penalised errors)", color=INK2)
-    ax.set_title("Segment penalties: coloured dots are segments (jittered); black dot and line are the mean and its 95% CI",
+    ax.set_title("Segment penalties\n(dots: segments, jittered; black: mean with 95% CI)",
                  loc="left", color=INK, fontsize=10)
     fig.tight_layout()
     fig.savefig(out / "segment_penalties.png", dpi=160)
